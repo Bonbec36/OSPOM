@@ -245,25 +245,35 @@ class Solver:
     # ── Conditions aux bords ──────────────────────────────────────────────────
 
     def apply_neumann_all(self, t: float = 0.0):
-        """Applique la condition de Neumann sur les 4 bords (flux nul sortant).
-        Équivalent à appeler apply_boundary() sans aucun argument imposé."""
+        """Neumann sur les 4 bords."""
         self.apply_boundary(t)
+
+    def apply_outflow_right(self, t: float = 0.0):
+        """
+        Condition sortante (outflow) sur le bord droit par extrapolation linéaire :
+            u[N+1] = 2*u[N] - u[N-1]
+        Permet à l'énergie de sortir sans réflexion — indispensable pour
+        atteindre un vrai régime stationnaire avec une source permanente.
+        """
+        M = self.mesh.M
+        for field in (self.E, self.Fx, self.Fy, self.T):
+            field[self.mesh.N+1, 1:M+1] = (2.0 * field[self.mesh.N,   1:M+1]
+                                               -       field[self.mesh.N-1, 1:M+1])
 
     def apply_boundary_default(self, t: float = 0.0):
         """
-        Conditions aux bords par défaut de la simulation :
+        Conditions aux bords par défaut :
           - Gauche  : source imposée  E=1, Fx=1
-          - Droite  : Neumann (sortie libre)
-          - Haut    : Neumann (sortie libre)
-          - Bas     : Neumann (sortie libre)
-        Modifie ici pour changer les bords sans toucher à main.py.
+          - Droite  : condition sortante (outflow) — laisse sortir l'énergie
+          - Haut    : Neumann
+          - Bas     : Neumann
         """
         self.apply_boundary(t,
-            E_l=1.0,    Fx_l=1.0,      # source à gauche
-            E_r=NEUMANN, Fx_r=NEUMANN, # sortie libre à droite
-            E_u=NEUMANN, Fx_u=NEUMANN, # sortie libre en haut
-            E_d=NEUMANN, Fx_d=NEUMANN, # sortie libre en bas
+            E_l=1.0,    Fx_l=1.0,       # source à gauche
+            E_u=NEUMANN, Fx_u=NEUMANN,  # sortie libre en haut
+            E_d=NEUMANN, Fx_d=NEUMANN,  # sortie libre en bas
         )
+        self.apply_outflow_right(t)      # outflow à droite
 
     def apply_boundary(self, t: float,
                        E_u=None,  E_d=None,  E_l=None,  E_r=None,

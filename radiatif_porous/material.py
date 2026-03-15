@@ -23,7 +23,7 @@ RHO_AIR   = 1.0
 RHO_DISK  = 10.0
 
 SIGMA_C_AIR  = 0.5    # scattering faible dans l'air
-SIGMA_C_DISK = 1.0   # scattering fort dans le diélectrique
+SIGMA_C_DISK = 5.0   # scattering fort dans le diélectrique
 
 SIGMA_A_AIR  = 0.0    # pas d'absorption dans l'air
 SIGMA_A_DISK = 2.0    # absorption partielle dans le disque
