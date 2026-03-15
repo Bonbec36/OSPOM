@@ -15,6 +15,11 @@ import csv
 import sys
 from mesh import Mesh, cell_id
 
+# Sentinel pour la condition de Neumann — utilisable à l'import :
+#   from solver import Solver, NEUMANN
+#   solver.apply_boundary(t, E_l=1.0, E_r=NEUMANN)
+NEUMANN = None
+
 
 class Solver:
 
@@ -239,49 +244,79 @@ class Solver:
 
     # ── Conditions aux bords ──────────────────────────────────────────────────
 
+    def apply_neumann_all(self, t: float = 0.0):
+        """Applique la condition de Neumann sur les 4 bords (flux nul sortant).
+        Équivalent à appeler apply_boundary() sans aucun argument imposé."""
+        self.apply_boundary(t)
+
+    def apply_boundary_default(self, t: float = 0.0):
+        """
+        Conditions aux bords par défaut de la simulation :
+          - Gauche  : source imposée  E=1, Fx=1
+          - Droite  : Neumann (sortie libre)
+          - Haut    : Neumann (sortie libre)
+          - Bas     : Neumann (sortie libre)
+        Modifie ici pour changer les bords sans toucher à main.py.
+        """
+        self.apply_boundary(t,
+            E_l=1.0,    Fx_l=1.0,      # source à gauche
+            E_r=NEUMANN, Fx_r=NEUMANN, # sortie libre à droite
+            E_u=NEUMANN, Fx_u=NEUMANN, # sortie libre en haut
+            E_d=NEUMANN, Fx_d=NEUMANN, # sortie libre en bas
+        )
+
     def apply_boundary(self, t: float,
-                       E_u=None, E_d=None, E_l=None, E_r=None,
+                       E_u=None,  E_d=None,  E_l=None,  E_r=None,
                        Fx_u=None, Fx_d=None, Fx_l=None, Fx_r=None,
                        Fy_u=None, Fy_d=None, Fy_l=None, Fy_r=None,
                        T_u=None,  T_d=None,  T_l=None,  T_r=None):
         """
-        Remplit les mailles fantômes.
-        Chaque argument est soit None (→ Neumann : copie du bord intérieur),
-        soit un scalaire, soit un array 1D de longueur N ou M,
-        soit une fonction f(t, coords) → array.
-        N, M = self.mesh.N, self.mesh.M
+        Remplit les mailles fantômes pour les 4 bords.
+
+        Chaque argument accepte :
+          None / NEUMANN   → condition de Neumann : copie la valeur du bord intérieur
+                             (∂u/∂n = 0, flux sortant nul)
+          scalaire float   → valeur uniforme imposée sur tout le bord
+          array 1D (N,/M,) → valeur imposée cellule par cellule
+          callable f(t, coords) → valeur calculée à chaque pas de temps
+
+        Bords :
+          _u = haut   (j = M+1), coords en x, longueur N
+          _d = bas    (j = 0),   coords en x, longueur N
+          _l = gauche (i = 0),   coords en y, longueur M
+          _r = droite (i = N+1), coords en y, longueur M
         """
         N, M = self.mesh.N, self.mesh.M
 
         def _val(spec, t, coords, interior):
-            if spec is None:
-                return interior          # Neumann
+            if spec is None:                      # Neumann
+                return interior
             if callable(spec):
                 return spec(t, coords)
             return np.full_like(interior, float(spec))
 
-        xs = self.mesh.x[1:N+1]   # coordonnées des mailles intérieures en x
-        ys = self.mesh.y[1:M+1]   # idem en y
+        xs = self.mesh.x[1:N+1]
+        ys = self.mesh.y[1:M+1]
 
-        # Haut (j = M+1), fantôme au-dessus des mailles intérieures j=M
+        # ── Haut (j = M+1) ────────────────────────────────────────────────────
         self.E [1:N+1, M+1] = _val(E_u,  t, xs, self.E [1:N+1, M])
         self.Fx[1:N+1, M+1] = _val(Fx_u, t, xs, self.Fx[1:N+1, M])
         self.Fy[1:N+1, M+1] = _val(Fy_u, t, xs, self.Fy[1:N+1, M])
         self.T [1:N+1, M+1] = _val(T_u,  t, xs, self.T [1:N+1, M])
 
-        # Bas (j = 0)
+        # ── Bas (j = 0) ───────────────────────────────────────────────────────
         self.E [1:N+1, 0] = _val(E_d,  t, xs, self.E [1:N+1, 1])
         self.Fx[1:N+1, 0] = _val(Fx_d, t, xs, self.Fx[1:N+1, 1])
         self.Fy[1:N+1, 0] = _val(Fy_d, t, xs, self.Fy[1:N+1, 1])
         self.T [1:N+1, 0] = _val(T_d,  t, xs, self.T [1:N+1, 1])
 
-        # Gauche (i = 0)
+        # ── Gauche (i = 0) ────────────────────────────────────────────────────
         self.E [0, 1:M+1] = _val(E_l,  t, ys, self.E [1, 1:M+1])
         self.Fx[0, 1:M+1] = _val(Fx_l, t, ys, self.Fx[1, 1:M+1])
         self.Fy[0, 1:M+1] = _val(Fy_l, t, ys, self.Fy[1, 1:M+1])
         self.T [0, 1:M+1] = _val(T_l,  t, ys, self.T [1, 1:M+1])
 
-        # Droite (i = N+1)
+        # ── Droite (i = N+1) ──────────────────────────────────────────────────
         self.E [N+1, 1:M+1] = _val(E_r,  t, ys, self.E [N, 1:M+1])
         self.Fx[N+1, 1:M+1] = _val(Fx_r, t, ys, self.Fx[N, 1:M+1])
         self.Fy[N+1, 1:M+1] = _val(Fy_r, t, ys, self.Fy[N, 1:M+1])
@@ -336,3 +371,58 @@ class Solver:
         """Retourne les champs intérieurs sous forme de vues NumPy 2D."""
         s = np.s_[1:self.mesh.N+1, 1:self.mesh.M+1]
         return self.E[s], self.Fx[s], self.Fy[s], self.T[s]
+
+    def compute_TRA(self):
+        """
+        Calcule la Transmission, la Réflexion et l'Absorption.
+
+        Bilan complet :  T + R + A + F_top + F_bot = 1
+        où F_top/F_bot sont les fuites par les bords haut et bas (Neumann).
+
+        Convention :
+          - Source : Fx imposé en maille fantôme gauche i=0
+          - R = flux_source - flux_net_i1   (ce qui n'a pas traversé i=1)
+          - T = flux sortant en i=N (bord droit)
+          - A = c * sigma_a * E  intégré sur le volume
+          - F_top/bot = Fy sortant par j=M et j=1 (si bords Neumann)
+
+        ⚠️  Les bords haut/bas/droite doivent être en Neumann (None dans
+        apply_boundary) pour que le bilan soit correct. Imposer E=0 sur un bord
+        crée un puits artificiel qui gonfle le bilan.
+        """
+        N, M   = self.mesh.N, self.mesh.M
+        dx, dy = self.mesh.dx, self.mesh.dy
+        c      = self.c
+
+        # ── Flux source (fantôme gauche i=0) — référence de normalisation ─────
+        flux_source = np.sum(self.Fx[0, 1:M+1]) * dy
+        if flux_source <= 0:
+            flux_source = 1.0
+
+        # ── Transmission (bord droit i=N) ─────────────────────────────────────
+        T_total = np.sum(self.Fx[N, 1:M+1]) * dy / flux_source
+
+        # ── Absorption volumique ──────────────────────────────────────────────
+        sig_a   = self.sigma_a_func(self.rho[1:N+1, 1:M+1], self.T[1:N+1, 1:M+1])
+        A_total = np.sum(self.c * sig_a * self.E[1:N+1, 1:M+1] * dx * dy) / flux_source
+
+        # ── Fuites latérales haut et bas (bords Neumann) ─────────────────────
+        F_top = np.sum( self.Fy[1:N+1, M]) * dx / flux_source
+        F_bot = np.sum(-self.Fy[1:N+1, 1]) * dx / flux_source
+
+        # ── Réflexion : déduite du bilan pour garantir T+R+A+F = 1 ──────────
+        # Ancienne formule (flux_source - flux_i1) surestimait R car elle
+        # confondait la diffusion latérale (Fy) avec de la réflexion.
+        R_total = 1.0 - T_total - A_total - F_top - F_bot
+
+        bilan = T_total + R_total + A_total + F_top + F_bot  # = 1 par construction
+
+        return {
+            "T":       max(T_total, 0.0),
+            "R":       max(R_total, 0.0),
+            "A":       max(A_total, 0.0),
+            "F_top":   F_top,
+            "F_bot":   F_bot,
+            "bilan":   bilan,
+            "flux_in": flux_source,
+        }
