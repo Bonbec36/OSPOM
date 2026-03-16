@@ -12,7 +12,7 @@ import numpy as np
 
 DISK_CX = 0.5
 DISK_CY = 0.5
-DISK_R  = 0.3
+DISK_R  = 0.25
 
 def in_disk(X, Y):
     return (X - DISK_CX)**2 + (Y - DISK_CY)**2 <= DISK_R**2
@@ -23,10 +23,10 @@ RHO_AIR   = 1.0
 RHO_DISK  = 10.0
 
 SIGMA_C_AIR  = 0.5    # scattering faible dans l'air
-SIGMA_C_DISK = 5.0   # scattering fort dans le diélectrique
+SIGMA_C_DISK = 10.0   # scattering fort dans le diélectrique
 
 SIGMA_A_AIR  = 0.0    # pas d'absorption dans l'air
-SIGMA_A_DISK = 2.0    # absorption partielle dans le disque
+SIGMA_A_DISK = 0.1    # absorption partielle dans le disque
 
 
 def rho_func(X, Y):
